@@ -6,7 +6,7 @@
 > master e passei a ter erros constantes de desconexão com status 428
 > (`connectionClosed`). O que mudou?"**
 >
-> 📄 **Análise detalhada com exemplos de código:** [`docs/428-regression-analysis.md`](docs/428-regression-analysis.md)  
+> 📄 **Análise detalhada com exemplos de código:** [`428-regression-analysis.md`](428-regression-analysis.md)  
 > Inclui: diagrama de fluxo, comparação RC9 vs master, guia de diagnóstico, workarounds.
 
 ---
