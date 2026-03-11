@@ -5,6 +5,9 @@
 > O objetivo é responder: **"Estava usando a RC9 sem problemas. Atualizei para o
 > master e passei a ter erros constantes de desconexão com status 428
 > (`connectionClosed`). O que mudou?"**
+>
+> 📄 **Análise detalhada com exemplos de código:** [`docs/428-regression-analysis.md`](docs/428-regression-analysis.md)  
+> Inclui: diagrama de fluxo, comparação RC9 vs master, guia de diagnóstico, workarounds.
 
 ---
 
@@ -276,6 +279,48 @@ garantido entre tipos diferentes de mutex.
 
 Em cenários com muitos eventos simultâneos, esta mudança pode levar a estados
 inconsistentes no app que, em casos extremos, resultam em reconexões forçadas.
+
+---
+
+### ⚠️ 8. `end()` virou `async` mas `mapWebSocketError` não faz `await` — commit `282f065`
+
+**Risco:** 🟡 MÉDIO — exceções dentro de `end()` podem ficar sem handler
+
+**O que mudou:**
+```ts
+// RC9:
+const end = (error: Error | undefined) => { ws.close() }
+ws.on('error', mapWebSocketError(end))  // end: (err) => void ✓
+
+// master:
+const end = async (error: Error | undefined) => { await ws.close() }
+ws.on('error', mapWebSocketError(end))  // mapWebSocketError ainda espera (err) => void
+```
+
+`mapWebSocketError` chama `end(...)` mas não faz `await`. Qualquer exceção que
+`ws.close()` lance depois do `await` fica como `UnhandledPromiseRejection`.
+
+---
+
+### ⚠️ 9. `presenceSubscribe` agora faz DB read antes de enviar — PR #2257 (`349e7bd`)
+
+**Risco:** 🟡 BAIXO-MÉDIO — introduz janela de tempo onde o WS pode fechar entre a leitura e o envio
+
+**O que mudou:**
+```ts
+// RC9 — síncrono, envia imediatamente:
+const presenceSubscribe = (toJid: string, tcToken?: Buffer) => sendNode(...)
+
+// master — assíncrono, lê store primeiro:
+const presenceSubscribe = async (toJid: string) => {
+    const tcTokenContent = await buildTcTokenFromJid({ authState, jid: toJid })
+    return sendNode(...)  // ← WS pode ter fechado durante o await acima
+}
+```
+
+O mesmo padrão foi aplicado a `profilePictureUrl`. Entre o `await buildTcTokenFromJid`
+e o `sendNode`, o WebSocket pode ter sido fechado (por `sendUnifiedSession` ou outra causa).
+O `sendNode` lança 428 nesse caso.
 
 ---
 
